@@ -3,10 +3,10 @@ package com.example.todo
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.activity.enableEdgeToEdge
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -15,6 +15,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -91,12 +92,12 @@ fun EditTodoDialog(
     )
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TodoApp(todoViewModel: TodoViewModel = viewModel()) {
     val todos by todoViewModel.todos.collectAsStateWithLifecycle()
     var input by remember { mutableStateOf("") }
     var editingTodo by remember { mutableStateOf<TodoItem?>(null) }
+    var showDone by remember { mutableStateOf(false) }
 
     Box(
         modifier = Modifier
@@ -110,7 +111,6 @@ fun TodoApp(todoViewModel: TodoViewModel = viewModel()) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .statusBarsPadding()
                 .padding(16.dp)
         ) {
             Spacer(modifier = Modifier.height(24.dp))
@@ -121,12 +121,24 @@ fun TodoApp(todoViewModel: TodoViewModel = viewModel()) {
                 fontWeight = FontWeight.ExtraBold,
                 color = Color(0xFF2D2D2D)
             )
-            Text(
-                text = "${todos.count { !it.isDone }} offen · ${todos.count { it.isDone }} erledigt",
-                fontSize = 14.sp,
-                color = Color(0xFF888888),
-                modifier = Modifier.padding(top = 4.dp)
-            )
+
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = "${todos.count { !it.isDone }} offen · ${todos.count { it.isDone }} erledigt",
+                    fontSize = 14.sp,
+                    color = Color(0xFF888888),
+                )
+                if (todos.any { it.isDone }) {
+                    Text(
+                        text = if (showDone) "  ▲" else "  ▼",
+                        fontSize = 14.sp,
+                        color = Color(0xFFFF6B6B),
+                        modifier = Modifier
+                            .padding(start = 4.dp)
+                            .clickable { showDone = !showDone }
+                    )
+                }
+            }
 
             Spacer(modifier = Modifier.height(24.dp))
 
@@ -166,10 +178,12 @@ fun TodoApp(todoViewModel: TodoViewModel = viewModel()) {
             Spacer(modifier = Modifier.height(16.dp))
 
             LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                items(todos, key = { it.id }) { todo ->
+
+                // Offene Todos
+                items(todos.filter { !it.isDone }, key = { it.id }) { todo ->
                     val cardColor = cardColors[todo.id % cardColors.size]
                     val bgColor by animateColorAsState(
-                        targetValue = if (todo.isDone) Color(0xFFEEEEEE) else cardColor.copy(alpha = 0.15f),
+                        targetValue = cardColor.copy(alpha = 0.15f),
                         animationSpec = tween(300)
                     )
 
@@ -190,28 +204,23 @@ fun TodoApp(todoViewModel: TodoViewModel = viewModel()) {
                                     .width(4.dp)
                                     .height(36.dp)
                                     .clip(RoundedCornerShape(2.dp))
-                                    .background(if (todo.isDone) Color.LightGray else cardColor)
+                                    .background(cardColor)
                             )
                             Spacer(modifier = Modifier.width(12.dp))
-
                             Text(
                                 text = todo.text,
                                 modifier = Modifier.weight(1f),
                                 fontSize = 16.sp,
-                                fontWeight = if (todo.isDone) FontWeight.Normal else FontWeight.Medium,
-                                color = if (todo.isDone) Color.Gray else Color(0xFF2D2D2D),
-                                textDecoration = if (todo.isDone) TextDecoration.LineThrough else null
+                                fontWeight = FontWeight.Medium,
+                                color = Color(0xFF2D2D2D)
                             )
-
                             Checkbox(
-                                checked = todo.isDone,
+                                checked = false,
                                 onCheckedChange = { todoViewModel.toggleDone(todo) },
                                 colors = CheckboxDefaults.colors(
-                                    checkedColor = cardColor,
                                     uncheckedColor = cardColor
                                 )
                             )
-
                             IconButton(onClick = { editingTodo = todo }) {
                                 Icon(
                                     Icons.Default.Edit,
@@ -219,7 +228,6 @@ fun TodoApp(todoViewModel: TodoViewModel = viewModel()) {
                                     tint = Color(0xFFAAAAAA)
                                 )
                             }
-
                             IconButton(onClick = { todoViewModel.deleteTodo(todo) }) {
                                 Icon(
                                     Icons.Default.Delete,
@@ -231,6 +239,58 @@ fun TodoApp(todoViewModel: TodoViewModel = viewModel()) {
                     }
                 }
 
+                // Erledigte Todos aufklappbar
+                if (showDone) {
+                    items(todos.filter { it.isDone }, key = { "done_${it.id}" }) { todo ->
+                        val cardColor = cardColors[todo.id % cardColors.size]
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(20.dp),
+                            colors = CardDefaults.cardColors(containerColor = Color(0xFFEEEEEE)),
+                            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .padding(horizontal = 16.dp, vertical = 14.dp)
+                                    .fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .width(4.dp)
+                                        .height(36.dp)
+                                        .clip(RoundedCornerShape(2.dp))
+                                        .background(Color.LightGray)
+                                )
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Text(
+                                    text = todo.text,
+                                    modifier = Modifier.weight(1f),
+                                    fontSize = 16.sp,
+                                    fontWeight = FontWeight.Normal,
+                                    color = Color.Gray,
+                                    textDecoration = TextDecoration.LineThrough
+                                )
+                                IconButton(onClick = { todoViewModel.toggleDone(todo) }) {
+                                    Icon(
+                                        Icons.Default.Refresh,
+                                        contentDescription = "Wiederherstellen",
+                                        tint = Color(0xFFAAAAAA)
+                                    )
+                                }
+                                IconButton(onClick = { todoViewModel.deleteTodo(todo) }) {
+                                    Icon(
+                                        Icons.Default.Delete,
+                                        contentDescription = "Löschen",
+                                        tint = Color(0xFFCCCCCC)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Alle löschen
                 if (todos.isNotEmpty()) {
                     item {
                         Spacer(modifier = Modifier.height(4.dp))
